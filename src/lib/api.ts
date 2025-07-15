@@ -4,6 +4,7 @@ import type {
   Character,
   AnimeInfo,
 } from "@/types/character";
+import { recentCharacterCache } from "./recent-cache";
 
 export const ANIME_LIST: AnimeInfo[] = [
   {
@@ -49,7 +50,7 @@ export async function fetchAnimeCharacters(
     // Filter out invalid characters and transform to our format
     const characters: Character[] = data.data
       .filter(isValidCharacter) // Only keep characters with valid name and image
-      .slice(0, 20) // Get more characters to have better selection
+      .slice(0, 30) // Get more characters for better variety when filtering cache
       .map((item: JikanCharacter) => ({
         id: item.character.mal_id,
         name: item.character.name.trim(),
@@ -71,14 +72,34 @@ export async function fetchAnimeCharacters(
 export async function getRandomCharacterFromAnime(
   animeInfo: AnimeInfo
 ): Promise<Character> {
-  const characters = await fetchAnimeCharacters(animeInfo);
+  const allCharacters = await fetchAnimeCharacters(animeInfo);
 
-  if (characters.length === 0) {
+  if (allCharacters.length === 0) {
     throw new Error(`No characters found for ${animeInfo.name}`);
   }
 
-  const randomIndex = Math.floor(Math.random() * characters.length);
-  return characters[randomIndex];
+  // Filter out recently shown characters
+  const availableCharacters = allCharacters.filter(
+    (character) => !recentCharacterCache.has(character.id)
+  );
+
+  // If no characters are available after filtering (all are in cache),
+  // fall back to the full list to prevent getting stuck
+  const charactersToChooseFrom =
+    availableCharacters.length > 0 ? availableCharacters : allCharacters;
+
+  // Select random character
+  const randomIndex = Math.floor(Math.random() * charactersToChooseFrom.length);
+  const selectedCharacter = charactersToChooseFrom[randomIndex];
+
+  // Add selected character to recent cache
+  recentCharacterCache.add(selectedCharacter.id);
+
+  // Log cache status for debugging (can be removed in production)
+  console.log(`Selected ${selectedCharacter.name} from ${animeInfo.name}`);
+  console.log("Cache status:", recentCharacterCache.getStatus());
+
+  return selectedCharacter;
 }
 
 export function getRandomAnimeSelection(): [AnimeInfo, AnimeInfo] {
@@ -87,7 +108,7 @@ export function getRandomAnimeSelection(): [AnimeInfo, AnimeInfo] {
 }
 
 export async function getRandomMatchup(): Promise<[Character, Character]> {
-  const maxRetries = 5;
+  const maxRetries = 10; // Increased retries due to cache filtering
   let attempts = 0;
 
   while (attempts < maxRetries) {
@@ -95,6 +116,7 @@ export async function getRandomMatchup(): Promise<[Character, Character]> {
       const [anime1, anime2] = getRandomAnimeSelection();
 
       // Fetch characters from both anime in parallel
+      // Each call to getRandomCharacterFromAnime will automatically handle cache filtering
       const [character1, character2] = await Promise.all([
         getRandomCharacterFromAnime(anime1),
         getRandomCharacterFromAnime(anime2),
@@ -120,4 +142,14 @@ export async function getRandomMatchup(): Promise<[Character, Character]> {
   }
 
   throw new Error("Failed to generate unique matchup after multiple attempts");
+}
+
+// Utility function to get cache status (useful for debugging)
+export function getCacheStatus() {
+  return recentCharacterCache.getStatus();
+}
+
+// Utility function to clear cache (useful for testing or reset)
+export function clearRecentCache() {
+  recentCharacterCache.clear();
 }

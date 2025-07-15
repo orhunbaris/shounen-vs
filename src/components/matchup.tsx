@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Swords, Trophy, RefreshCw, AlertCircle } from "lucide-react";
+import { Swords, Trophy, RefreshCw, AlertCircle, Info } from "lucide-react";
 import type { Character, Vote } from "@/types/character";
-import { getRandomMatchup } from "@/lib/api";
+import { getRandomMatchup, getCacheStatus, clearRecentCache } from "@/lib/api";
 
 export default function Matchup() {
   const [currentMatchup, setCurrentMatchup] = useState<
@@ -18,6 +18,7 @@ export default function Matchup() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [battleCount, setBattleCount] = useState(0);
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
 
   const generateRandomMatchup = async () => {
     setIsLoading(true);
@@ -85,6 +86,11 @@ export default function Matchup() {
     generateRandomMatchup();
   };
 
+  const handleResetCache = () => {
+    clearRecentCache();
+    console.log("Recent character cache cleared");
+  };
+
   const getCharacterVotes = (characterId: number) => {
     return votes.find((vote) => vote.character.id === characterId)?.votes || 0;
   };
@@ -101,20 +107,29 @@ export default function Matchup() {
             <p className="text-gray-600 mb-4 text-sm leading-relaxed">
               {error}
             </p>
-            <Button
-              onClick={generateRandomMatchup}
-              className="bg-orange-500 hover:bg-orange-600 text-white"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Retrying...
-                </>
-              ) : (
-                "Try Again"
-              )}
-            </Button>
+            <div className="space-y-2">
+              <Button
+                onClick={generateRandomMatchup}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Retrying...
+                  </>
+                ) : (
+                  "Try Again"
+                )}
+              </Button>
+              <Button
+                onClick={handleResetCache}
+                variant="outline"
+                className="w-full text-sm bg-transparent"
+              >
+                Reset Cache & Try Again
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -147,12 +162,50 @@ export default function Matchup() {
             <span className="text-red-600">VS</span>
           </h1>
           <p className="text-gray-600">Choose your champion!</p>
-          {battleCount > 0 && (
-            <p className="text-sm text-gray-500 mt-1">
-              Battles fought: {battleCount}
-            </p>
-          )}
+          <div className="flex items-center justify-center gap-4 mt-2">
+            {battleCount > 0 && (
+              <p className="text-sm text-gray-500">
+                Battles fought: {battleCount}
+              </p>
+            )}
+            <Button
+              onClick={() => setShowDebugInfo(!showDebugInfo)}
+              variant="ghost"
+              size="sm"
+              className="text-xs text-gray-400 hover:text-gray-600"
+            >
+              <Info className="w-3 h-3 mr-1" />
+              Debug
+            </Button>
+          </div>
         </div>
+
+        {/* Debug Info */}
+        {showDebugInfo && (
+          <Card className="mb-4 border-blue-200">
+            <CardContent className="p-3">
+              <div className="text-xs space-y-1">
+                <p className="font-semibold text-blue-800">
+                  Recent Character Cache:
+                </p>
+                <p className="text-gray-600">
+                  Cached IDs: [{getCacheStatus().cache.join(", ") || "None"}]
+                </p>
+                <p className="text-gray-600">
+                  Size: {getCacheStatus().size}/{getCacheStatus().maxSize}
+                </p>
+                <Button
+                  onClick={handleResetCache}
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 text-xs h-6 bg-transparent"
+                >
+                  Clear Cache
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Battle Arena */}
         <Card className="mb-6 shadow-lg border-2 border-orange-200">
