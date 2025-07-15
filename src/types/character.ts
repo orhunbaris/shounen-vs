@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface Character {
   id: number;
   name: string;
@@ -23,7 +22,7 @@ export interface JikanCharacter {
     };
   };
   role: string;
-  voice_actors: any[];
+  voice_actors: unknown[]; 
 }
 
 export interface JikanResponse {
