@@ -1,0 +1,62 @@
+[
+  {
+    "id": 1,
+    "name": "Monkey D. Luffy",
+    "anime": "One Piece",
+    "image": "/placeholder.svg?height=200&width=200"
+  },
+  {
+    "id": 2,
+    "name": "Roronoa Zoro",
+    "anime": "One Piece",
+    "image": "/placeholder.svg?height=200&width=200"
+  },
+  {
+    "id": 3,
+    "name": "Sanji",
+    "anime": "One Piece",
+    "image": "/placeholder.svg?height=200&width=200"
+  },
+  {
+    "id": 4,
+    "name": "Naruto Uzumaki",
+    "anime": "Naruto",
+    "image": "/placeholder.svg?height=200&width=200"
+  },
+  {
+    "id": 5,
+    "name": "Sasuke Uchiha",
+    "anime": "Naruto",
+    "image": "/placeholder.svg?height=200&width=200"
+  },
+  {
+    "id": 6,
+    "name": "Kakashi Hatake",
+    "anime": "Naruto",
+    "image": "/placeholder.svg?height=200&width=200"
+  },
+  {
+    "id": 7,
+    "name": "Ichigo Kurosaki",
+    "anime": "Bleach",
+    "image": "/placeholder.svg?height=200&width=200"
+  },
+  {
+    "id": 8,
+    "name": "Rukia Kuchiki",
+    "anime": "Bleach",
+    "image": "/placeholder.svg?height=200&width=200"
+  },
+  {
+    "id": 9,
+    "name": "Uryu Ishida",
+    "anime": "Bleach",
+    "image": "/placeholder.svg?height=200&width=200"
+  },
+  {
+    "id": 10,
+    "name": "Renji Abarai",
+    "anime": "Bleach",
+    "image": "/placeholder.svg?height=200&width=200"
+  }
+]
