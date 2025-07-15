@@ -23,6 +23,15 @@ export const ANIME_LIST: AnimeInfo[] = [
   },
 ];
 
+function isValidCharacter(item: JikanCharacter): boolean {
+  return !!(
+    item.character?.name &&
+    item.character?.images?.jpg?.image_url &&
+    item.character.name.trim().length > 0 &&
+    item.character.images.jpg.image_url.startsWith("http")
+  );
+}
+
 export async function fetchAnimeCharacters(
   animeInfo: AnimeInfo
 ): Promise<Character[]> {
@@ -37,21 +46,20 @@ export async function fetchAnimeCharacters(
 
     const data: JikanResponse = await response.json();
 
-    // Transform API data to our Character format
+    // Filter out invalid characters and transform to our format
     const characters: Character[] = data.data
-      .filter(
-        (item: JikanCharacter) =>
-          item.character.images?.jpg?.image_url &&
-          item.character.name &&
-          item.role === "Main" // Only get main characters for better quality
-      )
-      .slice(0, 10) // Limit to first 10 main characters
+      .filter(isValidCharacter) // Only keep characters with valid name and image
+      .slice(0, 20) // Get more characters to have better selection
       .map((item: JikanCharacter) => ({
         id: item.character.mal_id,
-        name: item.character.name,
+        name: item.character.name.trim(),
         anime: animeInfo.name,
         image: item.character.images.jpg.image_url,
       }));
+
+    if (characters.length === 0) {
+      throw new Error(`No valid characters found for ${animeInfo.name}`);
+    }
 
     return characters;
   } catch (error) {
@@ -76,4 +84,40 @@ export async function getRandomCharacterFromAnime(
 export function getRandomAnimeSelection(): [AnimeInfo, AnimeInfo] {
   const shuffled = [...ANIME_LIST].sort(() => Math.random() - 0.5);
   return [shuffled[0], shuffled[1]];
+}
+
+export async function getRandomMatchup(): Promise<[Character, Character]> {
+  const maxRetries = 5;
+  let attempts = 0;
+
+  while (attempts < maxRetries) {
+    try {
+      const [anime1, anime2] = getRandomAnimeSelection();
+
+      // Fetch characters from both anime in parallel
+      const [character1, character2] = await Promise.all([
+        getRandomCharacterFromAnime(anime1),
+        getRandomCharacterFromAnime(anime2),
+      ]);
+
+      // Prevent duplicate matchups - ensure characters are different
+      if (character1.id !== character2.id) {
+        return [character1, character2];
+      }
+
+      // If same character, try again
+      attempts++;
+      console.log(
+        `Duplicate characters detected (${character1.name}), retrying... (${attempts}/${maxRetries})`
+      );
+    } catch (error) {
+      attempts++;
+      if (attempts >= maxRetries) {
+        throw error;
+      }
+      console.log(`Attempt ${attempts} failed, retrying...`);
+    }
+  }
+
+  throw new Error("Failed to generate unique matchup after multiple attempts");
 }

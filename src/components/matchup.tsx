@@ -6,10 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Swords, Trophy, RefreshCw, AlertCircle } from "lucide-react";
 import type { Character, Vote } from "@/types/character";
-import {
-  getRandomAnimeSelection,
-  getRandomCharacterFromAnime,
-} from "@/lib/api";
+import { getRandomMatchup } from "@/lib/api";
 
 export default function Matchup() {
   const [currentMatchup, setCurrentMatchup] = useState<
@@ -29,31 +26,25 @@ export default function Matchup() {
     setWinner(null);
 
     try {
-      const [anime1, anime2] = getRandomAnimeSelection();
-
-      // Fetch characters from both anime in parallel
-      const [character1, character2] = await Promise.all([
-        getRandomCharacterFromAnime(anime1),
-        getRandomCharacterFromAnime(anime2),
-      ]);
-
-      setCurrentMatchup([character1, character2]);
+      const matchup = await getRandomMatchup();
+      setCurrentMatchup(matchup);
 
       // Initialize votes for new characters if they don't exist
       setVotes((prevVotes) => {
         const newVotes = [...prevVotes];
 
-        if (!newVotes.find((v) => v.characterId === character1.id)) {
-          newVotes.push({ characterId: character1.id, votes: 0 });
-        }
-        if (!newVotes.find((v) => v.characterId === character2.id)) {
-          newVotes.push({ characterId: character2.id, votes: 0 });
-        }
+        matchup.forEach((character) => {
+          if (!newVotes.find((v) => v.character.id === character.id)) {
+            newVotes.push({ character, votes: 0 });
+          }
+        });
 
         return newVotes;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load battle");
+      const errorMessage =
+        err instanceof Error ? err.message : "Failed to load battle";
+      setError(errorMessage);
       console.error("Error generating matchup:", err);
     } finally {
       setIsLoading(false);
@@ -66,13 +57,25 @@ export default function Matchup() {
   }, []);
 
   const handleVote = (character: Character) => {
-    setVotes((prevVotes) =>
-      prevVotes.map((vote) =>
-        vote.characterId === character.id
-          ? { ...vote, votes: vote.votes + 1 }
-          : vote
-      )
-    );
+    setVotes((prevVotes) => {
+      const existingVoteIndex = prevVotes.findIndex(
+        (vote) => vote.character.id === character.id
+      );
+
+      if (existingVoteIndex >= 0) {
+        // Update existing vote
+        const newVotes = [...prevVotes];
+        newVotes[existingVoteIndex] = {
+          ...newVotes[existingVoteIndex],
+          votes: newVotes[existingVoteIndex].votes + 1,
+        };
+        return newVotes;
+      } else {
+        // Add new vote entry
+        return [...prevVotes, { character, votes: 1 }];
+      }
+    });
+
     setWinner(character);
     setShowResult(true);
     setBattleCount((prev) => prev + 1);
@@ -83,7 +86,7 @@ export default function Matchup() {
   };
 
   const getCharacterVotes = (characterId: number) => {
-    return votes.find((vote) => vote.characterId === characterId)?.votes || 0;
+    return votes.find((vote) => vote.character.id === characterId)?.votes || 0;
   };
 
   if (error) {
@@ -95,7 +98,9 @@ export default function Matchup() {
             <h2 className="text-xl font-bold text-gray-800 mb-2">
               Battle Failed!
             </h2>
-            <p className="text-gray-600 mb-4">{error}</p>
+            <p className="text-gray-600 mb-4 text-sm leading-relaxed">
+              {error}
+            </p>
             <Button
               onClick={generateRandomMatchup}
               className="bg-orange-500 hover:bg-orange-600 text-white"
@@ -122,7 +127,9 @@ export default function Matchup() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-4 border-orange-500 border-t-transparent mx-auto mb-4"></div>
           <h2 className="text-xl font-bold text-gray-800 mb-2">
-            Preparing Battle...
+            {battleCount === 0
+              ? "Preparing Battle..."
+              : "Loading Next Battle..."}
           </h2>
           <p className="text-gray-600">Summoning anime warriors</p>
         </div>
@@ -271,30 +278,50 @@ export default function Matchup() {
           </CardContent>
         </Card>
 
-        {/* Stats */}
+        {/* Battle Champions */}
         {votes.length > 0 && (
           <Card className="shadow-md">
             <CardContent className="p-4">
               <h3 className="font-semibold text-gray-800 mb-3 text-center">
                 Battle Champions
               </h3>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {votes
                   .filter((vote) => vote.votes > 0)
                   .sort((a, b) => b.votes - a.votes)
                   .slice(0, 5)
                   .map((vote, index) => (
                     <div
-                      key={vote.characterId}
-                      className="flex items-center justify-between text-sm"
+                      key={vote.character.id}
+                      className="flex items-center gap-3 p-2 rounded-lg bg-gray-50"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-500">#{index + 1}</span>
-                        <span className="font-medium">
-                          Character #{vote.characterId}
-                        </span>
+                      <span className="text-sm font-bold text-gray-500 w-6">
+                        #{index + 1}
+                      </span>
+                      <div className="w-8 h-8 rounded overflow-hidden border border-gray-200 flex-shrink-0">
+                        <Image
+                          src={vote.character.image || "/placeholder.svg"}
+                          alt={vote.character.name}
+                          width={32}
+                          height={32}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = "/placeholder.svg?height=32&width=32";
+                          }}
+                        />
                       </div>
-                      <span className="text-gray-600">{vote.votes} wins</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm text-gray-800 truncate">
+                          {vote.character.name}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {vote.character.anime}
+                        </p>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-600">
+                        {vote.votes} wins
+                      </span>
                     </div>
                   ))}
               </div>

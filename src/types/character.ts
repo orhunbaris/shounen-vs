@@ -6,7 +6,7 @@ export interface Character {
 }
 
 export interface Vote {
-  characterId: number;
+  character: Character;
   votes: number;
 }
 
