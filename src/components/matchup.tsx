@@ -4,38 +4,66 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Swords, Trophy } from "lucide-react";
+import { Swords, Trophy, RefreshCw, AlertCircle } from "lucide-react";
 import type { Character, Vote } from "@/types/character";
-import charactersData from "@/data/characters.json";
+import {
+  getRandomAnimeSelection,
+  getRandomCharacterFromAnime,
+} from "@/lib/api";
 
 export default function Matchup() {
-  const [characters] = useState<Character[]>(charactersData);
   const [currentMatchup, setCurrentMatchup] = useState<
     [Character, Character] | null
   >(null);
   const [votes, setVotes] = useState<Vote[]>([]);
   const [showResult, setShowResult] = useState(false);
   const [winner, setWinner] = useState<Character | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [battleCount, setBattleCount] = useState(0);
 
-  // Initialize votes for all characters
-  useEffect(() => {
-    const initialVotes = characters.map((char) => ({
-      characterId: char.id,
-      votes: 0,
-    }));
-    setVotes(initialVotes);
-    generateRandomMatchup();
-  }, [characters]);
-
-  const generateRandomMatchup = () => {
-    if (characters.length < 2) return;
-
-    const shuffled = [...characters].sort(() => Math.random() - 0.5);
-    const matchup: [Character, Character] = [shuffled[0], shuffled[1]];
-    setCurrentMatchup(matchup);
+  const generateRandomMatchup = async () => {
+    setIsLoading(true);
+    setError(null);
     setShowResult(false);
     setWinner(null);
+
+    try {
+      const [anime1, anime2] = getRandomAnimeSelection();
+
+      // Fetch characters from both anime in parallel
+      const [character1, character2] = await Promise.all([
+        getRandomCharacterFromAnime(anime1),
+        getRandomCharacterFromAnime(anime2),
+      ]);
+
+      setCurrentMatchup([character1, character2]);
+
+      // Initialize votes for new characters if they don't exist
+      setVotes((prevVotes) => {
+        const newVotes = [...prevVotes];
+
+        if (!newVotes.find((v) => v.characterId === character1.id)) {
+          newVotes.push({ characterId: character1.id, votes: 0 });
+        }
+        if (!newVotes.find((v) => v.characterId === character2.id)) {
+          newVotes.push({ characterId: character2.id, votes: 0 });
+        }
+
+        return newVotes;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load battle");
+      console.error("Error generating matchup:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  // Load initial matchup
+  useEffect(() => {
+    generateRandomMatchup();
+  }, []);
 
   const handleVote = (character: Character) => {
     setVotes((prevVotes) =>
@@ -47,18 +75,56 @@ export default function Matchup() {
     );
     setWinner(character);
     setShowResult(true);
+    setBattleCount((prev) => prev + 1);
+  };
+
+  const handleNextBattle = () => {
+    generateRandomMatchup();
   };
 
   const getCharacterVotes = (characterId: number) => {
     return votes.find((vote) => vote.characterId === characterId)?.votes || 0;
   };
 
-  if (!currentMatchup) {
+  if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 p-4 flex items-center justify-center">
+        <Card className="max-w-md mx-auto shadow-lg">
+          <CardContent className="p-6 text-center">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-800 mb-2">
+              Battle Failed!
+            </h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button
+              onClick={generateRandomMatchup}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Retrying...
+                </>
+              ) : (
+                "Try Again"
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isLoading || !currentMatchup) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 p-4 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading battle...</p>
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-orange-500 border-t-transparent mx-auto mb-4"></div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">
+            Preparing Battle...
+          </h2>
+          <p className="text-gray-600">Summoning anime warriors</p>
         </div>
       </div>
     );
@@ -74,6 +140,11 @@ export default function Matchup() {
             <span className="text-red-600">VS</span>
           </h1>
           <p className="text-gray-600">Choose your champion!</p>
+          {battleCount > 0 && (
+            <p className="text-sm text-gray-500 mt-1">
+              Battles fought: {battleCount}
+            </p>
+          )}
         </div>
 
         {/* Battle Arena */}
@@ -84,23 +155,29 @@ export default function Matchup() {
               {/* Left Character */}
               <div className="flex-1 text-center">
                 <div className="relative mb-3">
-                  <Image
-                    src={currentMatchup[0].image || "/placeholder.svg"}
-                    alt={currentMatchup[0].name}
-                    width={120}
-                    height={120}
-                    className="rounded-lg mx-auto border-2 border-orange-300 shadow-md"
-                  />
+                  <div className="w-28 h-28 mx-auto rounded-lg overflow-hidden border-2 border-orange-300 shadow-md bg-gray-100">
+                    <Image
+                      src={currentMatchup[0].image || "/placeholder.svg"}
+                      alt={currentMatchup[0].name}
+                      width={112}
+                      height={112}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = "/placeholder.svg?height=112&width=112";
+                      }}
+                    />
+                  </div>
                   {showResult && winner?.id === currentMatchup[0].id && (
                     <div className="absolute -top-2 -right-2">
                       <Trophy className="w-8 h-8 text-yellow-500 fill-yellow-400" />
                     </div>
                   )}
                 </div>
-                <h3 className="font-bold text-lg text-gray-800 mb-1">
+                <h3 className="font-bold text-sm text-gray-800 mb-1 leading-tight">
                   {currentMatchup[0].name}
                 </h3>
-                <p className="text-sm text-gray-600 mb-2">
+                <p className="text-xs text-gray-600 mb-2">
                   {currentMatchup[0].anime}
                 </p>
                 <p className="text-xs text-gray-500">
@@ -119,23 +196,29 @@ export default function Matchup() {
               {/* Right Character */}
               <div className="flex-1 text-center">
                 <div className="relative mb-3">
-                  <Image
-                    src={currentMatchup[1].image || "/placeholder.svg"}
-                    alt={currentMatchup[1].name}
-                    width={120}
-                    height={120}
-                    className="rounded-lg mx-auto border-2 border-red-300 shadow-md"
-                  />
+                  <div className="w-28 h-28 mx-auto rounded-lg overflow-hidden border-2 border-red-300 shadow-md bg-gray-100">
+                    <Image
+                      src={currentMatchup[1].image || "/placeholder.svg"}
+                      alt={currentMatchup[1].name}
+                      width={112}
+                      height={112}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = "/placeholder.svg?height=112&width=112";
+                      }}
+                    />
+                  </div>
                   {showResult && winner?.id === currentMatchup[1].id && (
                     <div className="absolute -top-2 -right-2">
                       <Trophy className="w-8 h-8 text-yellow-500 fill-yellow-400" />
                     </div>
                   )}
                 </div>
-                <h3 className="font-bold text-lg text-gray-800 mb-1">
+                <h3 className="font-bold text-sm text-gray-800 mb-1 leading-tight">
                   {currentMatchup[1].name}
                 </h3>
-                <p className="text-sm text-gray-600 mb-2">
+                <p className="text-xs text-gray-600 mb-2">
                   {currentMatchup[1].anime}
                 </p>
                 <p className="text-xs text-gray-500">
@@ -167,12 +250,21 @@ export default function Matchup() {
                   <p className="text-lg font-semibold text-gray-800">
                     {winner?.name} wins this round!
                   </p>
+                  <p className="text-sm text-gray-600">From {winner?.anime}</p>
                 </div>
                 <Button
-                  onClick={generateRandomMatchup}
-                  className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-lg"
+                  onClick={handleNextBattle}
+                  disabled={isLoading}
+                  className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-lg disabled:opacity-50"
                 >
-                  Next Battle ⚔️
+                  {isLoading ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+                      Loading Next Battle...
+                    </>
+                  ) : (
+                    "Next Battle ⚔️"
+                  )}
                 </Button>
               </div>
             )}
@@ -180,37 +272,40 @@ export default function Matchup() {
         </Card>
 
         {/* Stats */}
-        <Card className="shadow-md">
-          <CardContent className="p-4">
-            <h3 className="font-semibold text-gray-800 mb-3 text-center">
-              Battle Stats
-            </h3>
-            <div className="space-y-2">
-              {votes
-                .sort((a, b) => b.votes - a.votes)
-                .slice(0, 3)
-                .map((vote, index) => {
-                  const character = characters.find(
-                    (c) => c.id === vote.characterId
-                  );
-                  if (!character) return null;
-
-                  return (
+        {votes.length > 0 && (
+          <Card className="shadow-md">
+            <CardContent className="p-4">
+              <h3 className="font-semibold text-gray-800 mb-3 text-center">
+                Battle Champions
+              </h3>
+              <div className="space-y-2">
+                {votes
+                  .filter((vote) => vote.votes > 0)
+                  .sort((a, b) => b.votes - a.votes)
+                  .slice(0, 5)
+                  .map((vote, index) => (
                     <div
-                      key={character.id}
+                      key={vote.characterId}
                       className="flex items-center justify-between text-sm"
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-gray-500">#{index + 1}</span>
-                        <span className="font-medium">{character.name}</span>
+                        <span className="font-medium">
+                          Character #{vote.characterId}
+                        </span>
                       </div>
                       <span className="text-gray-600">{vote.votes} wins</span>
                     </div>
-                  );
-                })}
-            </div>
-          </CardContent>
-        </Card>
+                  ))}
+              </div>
+              {votes.filter((vote) => vote.votes > 0).length === 0 && (
+                <p className="text-center text-gray-500 text-sm">
+                  No battles completed yet
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
